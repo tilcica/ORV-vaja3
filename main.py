@@ -1,6 +1,8 @@
 import cv2 as cv
 
 def kmeans(slika, k=3, iteracije=10):
+    "added some extra stuff"
+    print("test")
     '''Izvede segmentacijo slike z uporabo metode k-means.'''
     pass
 
