@@ -14,8 +14,3 @@ def izracunaj_centre(slika, izbira, dimenzija_centra, T):
 
 if __name__ == "__main__":
     pass
-
-
-"""
-testing JIRA 8
-"""
