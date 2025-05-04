@@ -29,7 +29,39 @@ def kmeans(image, k=3, iterations=10, choice='r', T=10):
     return(segmentedImage)
 
 def meanshift(image, velikost_okna=30, dimenzija=3):
-    pass
+    h, w, c = image.shape
+
+    if dimenzija == 3:
+        features = image.reshape((-1, 3))
+    elif dimenzija == 5:
+        Y, X = np.mgrid[0:h, 0:w]
+        features = np.hstack(((image.reshape((-1, 3)))/255.0, np.dstack((X/w, Y/h)).reshape((-1, 2))))
+    
+    features = np.float32(features)
+    
+    def gaussian_kernel(distanceSqr, heightSqr):
+        return np.exp(-distanceSqr / (2 * heightSqr))
+    
+    segmentedFeatures = features.copy()
+    for i in range(len(features)):
+        print(i)
+        xI = features[i]
+        for _ in range(10):
+            weights = gaussian_kernel(np.sum((features - xI)**2, axis=1), velikost_okna ** 2)
+            
+            if np.sum(weights) == 0:
+                break
+                
+            xInew = np.sum(features * weights[:, np.newaxis], axis=0) / np.sum(weights)
+            
+            if np.linalg.norm(xInew - xI) < 1e-5:
+                break
+                
+            xI = xInew
+        
+        segmentedFeatures[i] = xI
+
+    return(((segmentedFeatures[:, :3] * 255).clip(0, 255).astype(np.uint8)).reshape((h, w, c)))
 
 def izracunaj_centre(image, choice, centerDimension, T):
     centers = []
