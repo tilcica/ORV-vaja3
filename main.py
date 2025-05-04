@@ -1,8 +1,9 @@
 import cv2 as cv
 import numpy as np
 import random
+from sklearn.neighbors import BallTree
 
-def kmeans(image, k=3, iterations=10, choice='r', T=10):
+def kmeans(image, k=8, iterations=10, choice='r', T=10):
     centers = np.float32(izracunaj_centre(image, choice=choice, centerDimension=3, T=T))
     
     h, w, c = image.shape
@@ -28,40 +29,90 @@ def kmeans(image, k=3, iterations=10, choice='r', T=10):
     
     return(segmentedImage)
 
-def meanshift(image, velikost_okna=30, dimenzija=3):
-    h, w, c = image.shape
-
+def gaussian_kernel(distance, bandwidth):
+    return np.exp(-0.5 * (distance / bandwidth) ** 2)
+             
+def meanshift(image, velikost_okna=30, dimenzija=3, maxIterations=10, min_cd=5):
+    h, w, _ = image.shape
+    
+    #define features
     if dimenzija == 3:
-        features = image.reshape((-1, 3))
+        features = image.reshape(-1, 3).astype(np.float32) / 255.0
     elif dimenzija == 5:
         Y, X = np.mgrid[0:h, 0:w]
-        features = np.hstack(((image.reshape((-1, 3)))/255.0, np.dstack((X/w, Y/h)).reshape((-1, 2))))
+        spatial = np.dstack((X/w, Y/h)).reshape(-1, 2)
+        features = np.hstack((image.reshape(-1, 3)/255.0, spatial))
     
-    features = np.float32(features)
+    def kernel(squaredDistance, windowSize):
+        return np.exp(-squaredDistance / (2 * windowSize))
     
-    def gaussian_kernel(distanceSqr, heightSqr):
-        return np.exp(-distanceSqr / (2 * heightSqr))
+    visited = np.zeros(len(features), dtype=bool)
+    finalCenters = []
     
-    segmentedFeatures = features.copy()
+    # spacial tree za buls neighbor search
+    tree = BallTree(features[:, 3:] if dimenzija == 5 else features) 
+    
+    #loop cez vse tocke
     for i in range(len(features)):
-        print(i)
-        xI = features[i]
-        for _ in range(10):
-            weights = gaussian_kernel(np.sum((features - xI)**2, axis=1), velikost_okna ** 2)
+        if visited[i]:
+            continue
             
-            if np.sum(weights) == 0:
-                break
-                
-            xInew = np.sum(features * weights[:, np.newaxis], axis=0) / np.sum(weights)
-            
-            if np.linalg.norm(xInew - xI) < 1e-5:
-                break
-                
-            xI = xInew
+        X = features[i].copy()
+        converged = False
         
-        segmentedFeatures[i] = xI
-
-    return(((segmentedFeatures[:, :3] * 255).clip(0, 255).astype(np.uint8)).reshape((h, w, c)))
+        for _ in range(maxIterations):
+            if dimenzija == 5:
+                indices = tree.query_radius([X[3:]], r=velikost_okna)[0]
+            else:
+                indices = tree.query_radius([X], r=velikost_okna)[0]
+            
+            neighbors = features[indices]
+            
+            squaredDistances = np.sum((neighbors - X)**2, axis=1)
+            weights = kernel(squaredDistances, velikost_okna ** 2)
+            sumOfWeights = np.sum(weights)
+            
+            if sumOfWeights == 0:
+                break
+                
+            newX = np.sum(neighbors * weights[:, np.newaxis], axis=0) / sumOfWeights
+            
+            #check if converge
+            if np.linalg.norm(newX - X) < min_cd:
+                converged = True
+                break
+                
+            X = newX
+        
+        if converged:
+            merged = False
+            for j, center in enumerate(finalCenters):
+                if np.linalg.norm(center - X) < min_cd:
+                    finalCenters[j] = (center + X) / 2
+                    merged = True
+                    break
+            
+            if not merged:
+                finalCenters.append(X)
+            
+            if dimenzija == 5:
+                indices = tree.query_radius([X[3:]], r=velikost_okna/2)[0]
+            else:
+                indices = tree.query_radius([X], r=velikost_okna/2)[0]
+            visited[indices] = True
+    
+    # assign points to clusters
+    if not finalCenters:
+        return image.copy()
+    
+    centers = np.array(finalCenters)
+    distances = np.sqrt(((features[:, np.newaxis] - centers)**2).sum(axis=2))
+    labels = np.argmin(distances, axis=1)
+    
+    # create image
+    segmented = centers[labels, :3]
+    segmented = (segmented * 255).clip(0, 255).astype(np.uint8)
+    return segmented.reshape((h, w, 3))
 
 def izracunaj_centre(image, choice, centerDimension, T):
     centers = []
@@ -121,10 +172,11 @@ def izracunaj_centre(image, choice, centerDimension, T):
     
     return np.array(centers)
 
-
 if __name__ == "__main__":
-    image = cv.imread('image.png')
-    #segmented = meanshift(image, velikost_okna=30, dimenzija=5)
-    segmented = kmeans(image)
+    image = cv.imread('flintAndSteel.png') # flintAndSteel peppers
+    cv.imshow('base', image)
+    #segmented = kmeans(image) #peppers; k=8; iterations=10; choice='r'; T=10
+    segmented = meanshift(image, velikost_okna=0.15, dimenzija=3, maxIterations=10, min_cd=0.08)
+    cv.imwrite('flintAndSteelMeanshift3.png', segmented)
     cv.imshow('Segmented', segmented)
     cv.waitKey(0)
