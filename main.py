@@ -43,7 +43,26 @@ def izracunaj_centre(image, choice, centerDimension, T):
         cv.destroyAllWindows()
 
     elif choice == 'n':
-        pass
+        maxAttempts = 1000
+        attempts = 0
+        
+        while len(centers) < centerDimension and attempts < maxAttempts:
+            candidate = features[random.randint(0, len(features) - 1)]
+            
+            valid = True
+            for center in centers:
+                if np.linalg.norm(candidate[:3] - center[:3]) < T:
+                    valid = False
+                    break
+            
+            if valid:
+                centers.append(candidate)
+                attempts = 0
+            else:
+                attempts += 1
+        
+        if attempts >= maxAttempts:
+            print("took too many attempts (1000+) to find centers")
     
     return np.array(centers)
 
