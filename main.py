@@ -3,7 +3,30 @@ import numpy as np
 import random
 
 def kmeans(image, k=3, iterations=10, choice='r', T=10):
-    pass
+    centers = np.float32(izracunaj_centre(image, choice=choice, centerDimension=3, T=T))
+    
+    h, w, c = image.shape
+    pixelValues = np.float32(image.reshape((-1, 3)))
+    
+    for _ in range(iterations):
+        distances = np.sqrt((pixelValues[:, np.newaxis] - centers)**2).sum(axis=2)
+        labels = np.argmin(distances, axis=1)
+        
+        newCenters = np.zeros_like(centers)
+        for i in range(k):
+            clusterPixels = pixelValues[labels == i]
+            if len(clusterPixels) > 0:
+                newCenters[i] = clusterPixels.mean(axis=0)
+        
+        if np.allclose(centers, newCenters):
+            break
+            
+        centers = newCenters
+    
+    segmentedCenters = centers.astype(np.uint8)
+    segmentedImage = segmentedCenters[labels].reshape((h, w, c))
+    
+    return(segmentedImage)
 
 def meanshift(image, velikost_okna=30, dimenzija=3):
     pass
